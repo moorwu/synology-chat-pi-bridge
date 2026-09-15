@@ -1,0 +1,15 @@
+[Unit]
+Description=Synology Chat Pi Bridge
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/synology-chat-pi-bridge
+EnvironmentFile=%h/.config/synology-chat-pi-bridge.env
+Environment=PATH=%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.bun/bin/bun run synology
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
