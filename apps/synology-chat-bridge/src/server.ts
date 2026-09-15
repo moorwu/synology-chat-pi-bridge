@@ -46,6 +46,11 @@ type TraceState = {
   statuses: string[];
 };
 
+type TraceDelta = {
+  skillFiles: string[];
+  filePaths: string[];
+};
+
 type ChatAttachment = {
   url?: string;
   fileUrl?: string;
@@ -234,7 +239,7 @@ async function handlePiEvent(config: Config, session: ChatSession, event: PiEven
     await sendSynologyText(config, "Thinking...", session.incomingUrl);
     return;
   }
-  if (session.traceEnabled) recordTraceEvent(session, event);
+  if (session.traceEnabled) await emitLiveTrace(config, session, event);
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
     session.output += event.assistantMessageEvent.delta;
     return;
@@ -259,27 +264,41 @@ function createTraceState(): TraceState {
   return { tools: {}, skillFiles: [], filePaths: [], statuses: [] };
 }
 
-function recordTraceEvent(session: ChatSession, event: PiEvent): void {
+async function emitLiveTrace(config: Config, session: ChatSession, event: PiEvent): Promise<void> {
+  const delta = recordTraceEvent(session, event);
   if (event.type === "tool_execution_start") {
-    session.trace.tools[event.toolName] = (session.trace.tools[event.toolName] ?? 0) + 1;
-    recordTraceStrings(session.trace, event.args);
-    return;
+    await sendSynologyText(config, `TRACE start: ${event.toolName}`, session.incomingUrl);
   }
   if (event.type === "tool_execution_end") {
-    recordTraceStrings(session.trace, event.result);
-    return;
+    await sendSynologyText(config, `TRACE end: ${event.toolName} ${event.isError ? "ERROR" : "OK"}`, session.incomingUrl);
   }
-  if (event.type === "extension_ui_request") {
-    recordUnique(session.trace.statuses, compactForTrace(event.method, 120), 12);
-    recordTraceStrings(session.trace, event);
+  if (delta.skillFiles.length) {
+    await sendSynologyText(config, `TRACE skill:\n${delta.skillFiles.map((path) => `- ${path}`).join("\n")}`, session.incomingUrl);
   }
 }
 
-function recordTraceStrings(trace: TraceState, value: unknown): void {
-  for (const text of collectStrings(value)) {
-    if (isSkillPath(text)) recordUnique(trace.skillFiles, text, 16);
-    if (isInterestingPath(text)) recordUnique(trace.filePaths, text, 24);
+function recordTraceEvent(session: ChatSession, event: PiEvent): TraceDelta {
+  if (event.type === "tool_execution_start") {
+    session.trace.tools[event.toolName] = (session.trace.tools[event.toolName] ?? 0) + 1;
+    return recordTraceStrings(session.trace, event.args);
   }
+  if (event.type === "tool_execution_end") {
+    return recordTraceStrings(session.trace, event.result);
+  }
+  if (event.type === "extension_ui_request") {
+    recordUnique(session.trace.statuses, compactForTrace(event.method, 120), 12);
+    return recordTraceStrings(session.trace, event);
+  }
+  return { skillFiles: [], filePaths: [] };
+}
+
+function recordTraceStrings(trace: TraceState, value: unknown): TraceDelta {
+  const delta: TraceDelta = { skillFiles: [], filePaths: [] };
+  for (const text of collectStrings(value)) {
+    if (isSkillPath(text) && recordUnique(trace.skillFiles, text, 16)) recordUnique(delta.skillFiles, text, 16);
+    if (isInterestingPath(text) && recordUnique(trace.filePaths, text, 24)) recordUnique(delta.filePaths, text, 24);
+  }
+  return delta;
 }
 
 function collectStrings(value: unknown, depth = 0): string[] {
@@ -302,11 +321,12 @@ function isInterestingPath(value: string): boolean {
   return value.startsWith("/") || value.startsWith("~/") || value.includes("/CODEWORDS.md") || value.includes("/skills/");
 }
 
-function recordUnique(values: string[], value: string, max: number): void {
+function recordUnique(values: string[], value: string, max: number): boolean {
   const compacted = compactForTrace(value, 260);
-  if (!compacted || values.includes(compacted)) return;
+  if (!compacted || values.includes(compacted)) return false;
   values.push(compacted);
   if (values.length > max) values.splice(0, values.length - max);
+  return true;
 }
 
 function compactForTrace(value: string, max: number): string {
