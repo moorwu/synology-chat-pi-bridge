@@ -325,6 +325,7 @@ async function sendSynologyAgentOutput(config: Config, session: ChatSession, tex
 
   await sendSynologyText(config, text || "已生成文件：", session.incomingUrl);
   for (const fileUrl of fileUrls) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await sendSynologyMessage(config, { text: `附件：${safeFileName(fileUrl)}`, fileUrl }, session.incomingUrl);
   }
 }
@@ -353,9 +354,22 @@ async function sendSynologyMessage(
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   });
+  const respText = await resp.text().catch(() => "");
   if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`Synology incoming webhook failed: HTTP ${resp.status} ${errText.slice(0, 200)}`);
+    throw new Error(`Synology incoming webhook failed: HTTP ${resp.status} ${respText.slice(0, 200)}`);
+  }
+  if (respText) {
+    try {
+      const parsed = JSON.parse(respText) as { success?: boolean; error?: unknown };
+      if (parsed.success === false) {
+        throw new Error(`Synology incoming webhook failed: ${JSON.stringify(parsed.error ?? parsed).slice(0, 300)}`);
+      }
+    } catch (err) {
+      if (String(err).includes("Synology incoming webhook failed")) throw err;
+    }
+  }
+  if (message.fileUrl) {
+    log.info({ fileUrl: message.fileUrl, response: respText.slice(0, 160) }, "synology file_url sent");
   }
 }
 
