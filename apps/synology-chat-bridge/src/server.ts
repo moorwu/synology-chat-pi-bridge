@@ -597,8 +597,15 @@ async function handleCommand(config: Config, session: ChatSession, text: string)
   const trimmed = text.trim();
   const [command, ...restParts] = trimmed.split(/\s+/);
   const rest = restParts.join(" ");
-  if (command === "/trace") {
-    const mode = rest.trim().toLowerCase();
+  const normalized = trimmed.toLowerCase().replace(/^\/+/, "");
+  if (command === "/trace" || command === "trace" || ["traceon", "traceoff", "tracestatus"].includes(normalized)) {
+    const mode = normalized === "traceon"
+      ? "on"
+      : normalized === "traceoff"
+        ? "off"
+        : normalized === "tracestatus"
+          ? "status"
+          : rest.trim().toLowerCase();
     if (["on", "1", "true", "enable", "enabled"].includes(mode)) {
       session.traceEnabled = true;
       session.trace = createTraceState();
@@ -611,7 +618,7 @@ async function handleCommand(config: Config, session: ChatSession, text: string)
       await sendSynologyText(config, "Trace disabled.", session.incomingUrl);
       return true;
     }
-    await sendSynologyText(config, `trace: ${session.traceEnabled ? "on" : "off"}\nuse: /trace on, /trace off`, session.incomingUrl);
+    await sendSynologyText(config, `trace: ${session.traceEnabled ? "on" : "off"}\nuse: trace on, trace off`, session.incomingUrl);
     return true;
   }
   if (command === "/status") {
@@ -676,16 +683,9 @@ async function handleWebhook(config: Config, request: Request): Promise<Response
   }
 
   const payload = body.payload ?? body;
-  let text = deepGetText(payload).trim();
+  const rawText = deepGetText(payload).trim();
+  let text = rawText;
   const trigger = deepGetString(payload, ["trigger_word"]).trim();
-  if (trigger && /^[#@/!]/.test(trigger) && text.startsWith(trigger)) {
-    text = text.slice(trigger.length).trim();
-  }
-  const attachmentSuffix = await attachmentPromptSuffix(config, payload);
-  if (!text && !attachmentSuffix) return new Response("no text\n", { status: 202 });
-  if (!text) text = "请处理这些附件。";
-  if (attachmentSuffix) text = `${text}\n${attachmentSuffix}`;
-
   const channelName = deepGetString(payload, ["channel_name", "channel"]);
   const channel = deepGetString(payload, ["channel_id", "thread_id"]) || channelName || "default";
   const user = deepGetString(payload, ["user_id", "username", "user_name"]) || "unknown";
@@ -697,10 +697,19 @@ async function handleWebhook(config: Config, request: Request): Promise<Response
     incomingUrlForChannel(config, channelName, channel),
   );
 
-  if (text.startsWith("/")) {
-    const handled = await handleCommand(config, session, text);
-    if (handled) return new Response("ok\n");
+  const rawCommandHandled = await handleCommand(config, session, rawText);
+  if (rawCommandHandled) return new Response("ok\n");
+
+  if (trigger && /^[#@/!]/.test(trigger) && text.startsWith(trigger)) {
+    text = text.slice(trigger.length).trim();
   }
+  const strippedCommandHandled = await handleCommand(config, session, text);
+  if (strippedCommandHandled) return new Response("ok\n");
+
+  const attachmentSuffix = await attachmentPromptSuffix(config, payload);
+  if (!text && !attachmentSuffix) return new Response("no text\n", { status: 202 });
+  if (!text) text = "请处理这些附件。";
+  if (attachmentSuffix) text = `${text}\n${attachmentSuffix}`;
 
   if (session.client.isStreaming) {
     await session.client.followUp(text);
