@@ -1,5 +1,7 @@
 # Synology Chat Pi Bridge
 
+[中文文档](README.zh-CN.md)
+
 A self-hosted bridge between Synology Chat webhooks and a local `pi` agent. It lets Synology Chat channels talk to an agent running on your LAN, with channel sessions, replies, file attachments, and generated media previews.
 
 ## Features
