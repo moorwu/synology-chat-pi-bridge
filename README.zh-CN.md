@@ -116,11 +116,9 @@ bridge 会把文件复制到公开目录，然后通过 Synology Chat 作为附�
 /trace on
 /trace off
 /trace status
-traceon
-traceoff
 ```
 
-`/trace on` 或 `traceon` 会实时输出简短的 `TRACE start/end` 工具调用消息，并在每轮 agent 回复后追加诊断摘要；如果本轮读取过 `SKILL.md`，也会显示出来。这是当前桥接层能看到的最接近「Skill 命中情况」的信号。
+`/trace on` 会实时输出简短的 `TRACE start/end` 工具调用消息，并在每轮 agent 回复后追加诊断摘要；如果本轮读取过 `SKILL.md`，也会显示出来。这是当前桥接层能看到的最接近「Skill 命中情况」的信号。
 
 `/model` 是可选功能，需要配置：
 

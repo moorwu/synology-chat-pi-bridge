@@ -106,11 +106,9 @@ Send these from Synology Chat:
 /trace on
 /trace off
 /trace status
-traceon
-traceoff
 ```
 
-`/trace on` or `traceon` streams compact `TRACE start/end` messages for tool calls, then appends a diagnostic summary after each agent turn. It also shows any `SKILL.md` files read during the turn, which is the bridge's best signal for skill usage.
+`/trace on` streams compact `TRACE start/end` messages for tool calls, then appends a diagnostic summary after each agent turn. It also shows any `SKILL.md` files read during the turn, which is the bridge's best signal for skill usage.
 
 The `/model` command is optional. Configure targets with:
 

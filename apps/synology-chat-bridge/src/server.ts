@@ -617,15 +617,8 @@ async function handleCommand(config: Config, session: ChatSession, text: string)
   const trimmed = text.trim();
   const [command, ...restParts] = trimmed.split(/\s+/);
   const rest = restParts.join(" ");
-  const normalized = trimmed.toLowerCase().replace(/^\/+/, "");
-  if (command === "/trace" || command === "trace" || ["traceon", "traceoff", "tracestatus"].includes(normalized)) {
-    const mode = normalized === "traceon"
-      ? "on"
-      : normalized === "traceoff"
-        ? "off"
-        : normalized === "tracestatus"
-          ? "status"
-          : rest.trim().toLowerCase();
+  if (command === "/trace") {
+    const mode = rest.trim().toLowerCase();
     if (["on", "1", "true", "enable", "enabled"].includes(mode)) {
       session.traceEnabled = true;
       session.trace = createTraceState();
@@ -638,7 +631,7 @@ async function handleCommand(config: Config, session: ChatSession, text: string)
       await sendSynologyText(config, "Trace disabled.", session.incomingUrl);
       return true;
     }
-    await sendSynologyText(config, `trace: ${session.traceEnabled ? "on" : "off"}\nuse: trace on, trace off`, session.incomingUrl);
+    await sendSynologyText(config, `trace: ${session.traceEnabled ? "on" : "off"}\nuse: /trace on, /trace off`, session.incomingUrl);
     return true;
   }
   if (command === "/status") {
