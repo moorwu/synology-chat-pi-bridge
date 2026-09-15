@@ -11,7 +11,7 @@
 - 支持多个 outgoing token。
 - 支持按频道名称或频道 ID 映射不同的 incoming webhook。
 - 按「频道 + 用户」隔离 Pi 会话。
-- 支持文本命令：`/status`、`/new`、`/abort`、`/compact`、`/model`。
+- 支持文本命令：`/status`、`/new`、`/abort`、`/compact`、`/model`、`/trace`。
 - 当 Synology outgoing payload 里包含附件 URL 时，自动下载到本机。
 - 当 agent 回复里出现本地文件路径时，自动通过 `/files/...` 暴露成内网 URL，再用 Synology `file_url` 发回 Chat。
 - 全局域网运行，不依赖 Discord 或 Telegram。
@@ -113,7 +113,12 @@ bridge 会把文件复制到公开目录，然后通过 Synology Chat 作为附�
 /abort
 /compact 可选原因
 /model local
+/trace on
+/trace off
+/trace status
 ```
+
+`/trace on` 会在每轮 agent 回复后追加一段简短诊断摘要，包含工具调用，以及本轮读取过的 `SKILL.md` 文件。这是当前桥接层能看到的最接近「Skill 命中情况」的信号。
 
 `/model` 是可选功能，需要配置：
 

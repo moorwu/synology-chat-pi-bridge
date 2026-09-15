@@ -35,6 +35,15 @@ type ChatSession = {
   output: string;
   incomingUrl?: string;
   model?: ModelTarget;
+  traceEnabled: boolean;
+  trace: TraceState;
+};
+
+type TraceState = {
+  tools: Record<string, number>;
+  skillFiles: string[];
+  filePaths: string[];
+  statuses: string[];
 };
 
 type ChatAttachment = {
@@ -209,7 +218,7 @@ async function getOrCreateSession(config: Config, key: string, incomingUrl?: str
     thinkingLevel: config.thinking,
   });
 
-  const session: ChatSession = { key, client, output: "", incomingUrl, model };
+  const session: ChatSession = { key, client, output: "", incomingUrl, model, traceEnabled: false, trace: createTraceState() };
   client.onEvent((event) => handlePiEvent(config, session, event).catch((err) => {
     log.warn({ err: String(err) }, "failed to handle pi event");
   }));
@@ -221,9 +230,11 @@ async function getOrCreateSession(config: Config, key: string, incomingUrl?: str
 async function handlePiEvent(config: Config, session: ChatSession, event: PiEvent): Promise<void> {
   if (event.type === "agent_start") {
     session.output = "";
+    session.trace = createTraceState();
     await sendSynologyText(config, "Thinking...", session.incomingUrl);
     return;
   }
+  if (session.traceEnabled) recordTraceEvent(session, event);
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
     session.output += event.assistantMessageEvent.delta;
     return;
@@ -238,7 +249,82 @@ async function handlePiEvent(config: Config, session: ChatSession, event: PiEven
   }
   if (event.type === "agent_end") {
     await sendSynologyAgentOutput(config, session, assistantTextFromAgentEnd(event) || session.output || "OK");
+    if (session.traceEnabled) {
+      await sendSynologyText(config, formatTraceSummary(session.trace), session.incomingUrl);
+    }
   }
+}
+
+function createTraceState(): TraceState {
+  return { tools: {}, skillFiles: [], filePaths: [], statuses: [] };
+}
+
+function recordTraceEvent(session: ChatSession, event: PiEvent): void {
+  if (event.type === "tool_execution_start") {
+    session.trace.tools[event.toolName] = (session.trace.tools[event.toolName] ?? 0) + 1;
+    recordTraceStrings(session.trace, event.args);
+    return;
+  }
+  if (event.type === "tool_execution_end") {
+    recordTraceStrings(session.trace, event.result);
+    return;
+  }
+  if (event.type === "extension_ui_request") {
+    recordUnique(session.trace.statuses, compactForTrace(event.method, 120), 12);
+    recordTraceStrings(session.trace, event);
+  }
+}
+
+function recordTraceStrings(trace: TraceState, value: unknown): void {
+  for (const text of collectStrings(value)) {
+    if (isSkillPath(text)) recordUnique(trace.skillFiles, text, 16);
+    if (isInterestingPath(text)) recordUnique(trace.filePaths, text, 24);
+  }
+}
+
+function collectStrings(value: unknown, depth = 0): string[] {
+  if (depth > 5 || value == null) return [];
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap((item) => collectStrings(item, depth + 1));
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap((item) => collectStrings(item, depth + 1));
+  }
+  return [];
+}
+
+function isSkillPath(value: string): boolean {
+  return value.includes("/skills/") && value.endsWith("SKILL.md");
+}
+
+function isInterestingPath(value: string): boolean {
+  if (!value.includes("/")) return false;
+  if (value.length > 500) return false;
+  return value.startsWith("/") || value.startsWith("~/") || value.includes("/CODEWORDS.md") || value.includes("/skills/");
+}
+
+function recordUnique(values: string[], value: string, max: number): void {
+  const compacted = compactForTrace(value, 260);
+  if (!compacted || values.includes(compacted)) return;
+  values.push(compacted);
+  if (values.length > max) values.splice(0, values.length - max);
+}
+
+function compactForTrace(value: string, max: number): string {
+  const oneLine = value.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= max) return oneLine;
+  return `${oneLine.slice(0, Math.max(0, max - 3))}...`;
+}
+
+function formatTraceSummary(trace: TraceState): string {
+  const lines = ["Trace"];
+  const tools = Object.entries(trace.tools)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, count]) => `${name} x${count}`);
+  lines.push(`tools: ${tools.length ? tools.join(", ") : "none"}`);
+  if (trace.skillFiles.length) lines.push(`skill files:\n${trace.skillFiles.map((path) => `- ${path}`).join("\n")}`);
+  if (trace.filePaths.length) lines.push(`paths:\n${trace.filePaths.slice(0, 12).map((path) => `- ${path}`).join("\n")}`);
+  if (trace.statuses.length) lines.push(`ui events: ${trace.statuses.join(", ")}`);
+  return lines.join("\n");
 }
 
 function assistantTextFromAgentEnd(event: Extract<PiEvent, { type: "agent_end" }>): string {
@@ -511,6 +597,23 @@ async function handleCommand(config: Config, session: ChatSession, text: string)
   const trimmed = text.trim();
   const [command, ...restParts] = trimmed.split(/\s+/);
   const rest = restParts.join(" ");
+  if (command === "/trace") {
+    const mode = rest.trim().toLowerCase();
+    if (["on", "1", "true", "enable", "enabled"].includes(mode)) {
+      session.traceEnabled = true;
+      session.trace = createTraceState();
+      await sendSynologyText(config, "Trace enabled. I will append tool and skill-read summaries after each turn.", session.incomingUrl);
+      return true;
+    }
+    if (["off", "0", "false", "disable", "disabled"].includes(mode)) {
+      session.traceEnabled = false;
+      session.trace = createTraceState();
+      await sendSynologyText(config, "Trace disabled.", session.incomingUrl);
+      return true;
+    }
+    await sendSynologyText(config, `trace: ${session.traceEnabled ? "on" : "off"}\nuse: /trace on, /trace off`, session.incomingUrl);
+    return true;
+  }
   if (command === "/status") {
     const state = await session.client.getState();
     await sendSynologyText(config, [
