@@ -382,12 +382,20 @@ function publicUrlForName(config: Config, name: string): string {
   return `${config.fileBaseUrl}/files/${encodeURIComponent(name)}`;
 }
 
+function publishedFileName(filePath: string): string {
+  const original = safeFileName(basename(filePath), "file");
+  const ext = extname(original);
+  const stem = ext ? original.slice(0, -ext.length) : original;
+  const compactStem = stem.slice(0, 120).replace(/^_+|_+$/g, "") || "file";
+  const cleanExt = ext.replace(/[^A-Za-z0-9.]/g, "").slice(0, 12).toLowerCase() || ".bin";
+  return `${Date.now()}-${compactStem}${cleanExt}`;
+}
+
 function publishLocalFile(config: Config, filePath: string): string | undefined {
   try {
     if (!existsSync(filePath) || !statSync(filePath).isFile()) return undefined;
     mkdirSync(config.publicDir, { recursive: true });
-    const ext = extname(filePath).replace(/[^A-Za-z0-9.]/g, "") || ".bin";
-    const name = `${Date.now()}-attachment${ext.toLowerCase()}`;
+    const name = publishedFileName(filePath);
     copyFileSync(filePath, join(config.publicDir, name));
     return publicUrlForName(config, name);
   } catch (err) {
