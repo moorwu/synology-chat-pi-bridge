@@ -64,6 +64,7 @@ const sessions = new Map<string, ChatSession>();
 let synologySendChain = Promise.resolve();
 let lastSynologySendAt = 0;
 const synologySendIntervalMs = 1300;
+const synologyTextChunkChars = 1500;
 
 function resolveHomePath(value: string): string {
   if (value === "~") return homedir();
@@ -440,7 +441,31 @@ async function sendSynologyAgentOutput(config: Config, session: ChatSession, tex
 }
 
 async function sendSynologyText(config: Config, text: string, incomingUrl = config.incomingUrl): Promise<void> {
-  return sendSynologyMessage(config, { text }, incomingUrl);
+  const chunks = splitSynologyText(text || "OK", synologyTextChunkChars);
+  if (chunks.length === 1) {
+    await sendSynologyMessage(config, { text: chunks[0] }, incomingUrl);
+    return;
+  }
+  for (let index = 0; index < chunks.length; index += 1) {
+    await sendSynologyMessage(config, { text: `[${index + 1}/${chunks.length}]\n${chunks[index]}` }, incomingUrl);
+  }
+}
+
+function splitSynologyText(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text];
+  const chunks: string[] = [];
+  let remaining = text.trim();
+  while (remaining.length > maxChars) {
+    let cut = remaining.lastIndexOf("\n\n", maxChars);
+    if (cut < Math.floor(maxChars * 0.45)) cut = remaining.lastIndexOf("\n", maxChars);
+    if (cut < Math.floor(maxChars * 0.45)) cut = remaining.lastIndexOf("。", maxChars);
+    if (cut < Math.floor(maxChars * 0.45)) cut = remaining.lastIndexOf(". ", maxChars);
+    if (cut < Math.floor(maxChars * 0.45)) cut = maxChars;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks.filter(Boolean);
 }
 
 async function sendSynologyMessage(
@@ -463,7 +488,7 @@ async function sendSynologyMessageNow(
     return;
   }
 
-  const payload: Record<string, string> = { text: message.text.slice(0, 3900) || "OK" };
+  const payload: Record<string, string> = { text: message.text.slice(0, 2200) || "OK" };
   if (message.fileUrl) payload.file_url = message.fileUrl;
 
   const body = new URLSearchParams();
