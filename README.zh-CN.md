@@ -1,6 +1,6 @@
 # Synology Chat Pi Bridge
 
-[English README](README.md)
+[English](README.md) | [日本語](README.ja.md)
 
 这是一个自托管桥接服务，用来把群晖 Synology Chat 的 webhook 接到本地 `pi` agent。它适合在局域网里使用，让 Chat 频道可以直接和本地 agent 对话，并支持多频道会话、文件附件、图片预览和生成文件回传。
 
