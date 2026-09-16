@@ -61,6 +61,9 @@ type ChatAttachment = {
 
 const log = createLogger("synology-chat:bridge");
 const sessions = new Map<string, ChatSession>();
+let synologySendChain = Promise.resolve();
+let lastSynologySendAt = 0;
+const synologySendIntervalMs = 1300;
 
 function resolveHomePath(value: string): string {
   if (value === "~") return homedir();
@@ -445,6 +448,16 @@ async function sendSynologyMessage(
   message: { text: string; fileUrl?: string },
   incomingUrl = config.incomingUrl,
 ): Promise<void> {
+  const run = synologySendChain.then(() => sendSynologyMessageNow(config, message, incomingUrl));
+  synologySendChain = run.catch(() => undefined);
+  return run;
+}
+
+async function sendSynologyMessageNow(
+  config: Config,
+  message: { text: string; fileUrl?: string },
+  incomingUrl = config.incomingUrl,
+): Promise<void> {
   if (!incomingUrl) {
     log.warn({ text: message.text.slice(0, 160) }, "SYNOLOGY_CHAT_INCOMING_URL not configured; response not sent");
     return;
@@ -455,28 +468,45 @@ async function sendSynologyMessage(
 
   const body = new URLSearchParams();
   body.set("payload", JSON.stringify(payload));
-  const resp = await fetch(incomingUrl, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body,
-  });
-  const respText = await resp.text().catch(() => "");
-  if (!resp.ok) {
-    throw new Error(`Synology incoming webhook failed: HTTP ${resp.status} ${respText.slice(0, 200)}`);
-  }
-  if (respText) {
-    try {
-      const parsed = JSON.parse(respText) as { success?: boolean; error?: unknown };
-      if (parsed.success === false) {
-        throw new Error(`Synology incoming webhook failed: ${JSON.stringify(parsed.error ?? parsed).slice(0, 300)}`);
-      }
-    } catch (err) {
-      if (String(err).includes("Synology incoming webhook failed")) throw err;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const waitMs = Math.max(0, synologySendIntervalMs - (Date.now() - lastSynologySendAt));
+    if (waitMs > 0) await delay(waitMs);
+
+    const resp = await fetch(incomingUrl, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    lastSynologySendAt = Date.now();
+    const respText = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      throw new Error(`Synology incoming webhook failed: HTTP ${resp.status} ${respText.slice(0, 200)}`);
     }
+    if (respText) {
+      try {
+        const parsed = JSON.parse(respText) as { success?: boolean; error?: unknown };
+        if (parsed.success === false) {
+          const errorText = JSON.stringify(parsed.error ?? parsed).slice(0, 300);
+          if (errorText.includes("\"code\":411") && attempt < 2) {
+            await delay(2200);
+            continue;
+          }
+          throw new Error(`Synology incoming webhook failed: ${errorText}`);
+        }
+      } catch (err) {
+        if (String(err).includes("Synology incoming webhook failed")) throw err;
+      }
+    }
+    if (message.fileUrl) {
+      log.info({ fileUrl: message.fileUrl, response: respText.slice(0, 160) }, "synology file_url sent");
+    }
+    return;
   }
-  if (message.fileUrl) {
-    log.info({ fileUrl: message.fileUrl, response: respText.slice(0, 160) }, "synology file_url sent");
-  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function parseBody(request: Request): Promise<Record<string, unknown>> {
