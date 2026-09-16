@@ -42,6 +42,29 @@ http://桥接机器IP:8789/health
 
 如果返回 `OK`，说明服务已启动。
 
+## 配置项汇总
+
+把这些变量写入启动 bridge 时加载的环境文件。使用示例 systemd 用户服务时，通常是 `~/.config/synology-chat-pi-bridge.env`。
+
+| 配置项 | 是否必填 | 默认值 | 用途 |
+| --- | --- | --- | --- |
+| `SYNOLOGY_CHAT_LISTEN_HOST` | 否 | `0.0.0.0` | bridge 的 HTTP 监听地址。建议用 `0.0.0.0`，这样群晖 NAS 才能通过局域网访问。 |
+| `SYNOLOGY_CHAT_PORT` | 否 | `8789` | `/synology-chat/webhook`、`/health`、`/files/...` 使用的 HTTP 端口。 |
+| `SYNOLOGY_CHAT_OUTGOING_TOKEN` | 建议填写 | 无 | Synology Chat 发出的 Webhook 里的 token，用来校验请求来源。 |
+| `SYNOLOGY_CHAT_OUTGOING_TOKENS` | 否 | 无 | 额外 token，逗号分隔。多个 outgoing webhook 接到同一个 bridge 时使用。 |
+| `SYNOLOGY_CHAT_INCOMING_URL` | 要回复时必填 | 无 | 默认的 Synology incoming webhook URL，用来把机器人回复发回 Chat。 |
+| `SYNOLOGY_CHAT_INCOMING_URLS_JSON` | 否 | `{}` | 按频道映射 incoming webhook。key 可以是频道名，也可以是频道 ID。 |
+| `SYNOLOGY_CHAT_IGNORE_USERS` | 否 | `Pi Bot` | 需要忽略的 Synology 用户名，逗号分隔，用来避免机器人回复触发自己。 |
+| `SYNOLOGY_CHAT_FILE_BASE_URL` | 要显示图片/文件时必填 | `http://127.0.0.1:<port>` | 生成文件的公开访问根地址。必须写成 bridge 机器的局域网地址，例如 `http://192.168.50.103:8789`，不要用 localhost。 |
+| `PI_PATH` | 否 | `pi` | `pi` 可执行文件路径。 |
+| `PI_WORKSPACE_DIR` | 否 | 当前工作目录 | Pi agent 的工作目录。 |
+| `PI_DEFAULT_PROVIDER` | 否 | Pi 默认值 | 启动时传给 Pi 的默认 provider。 |
+| `PI_DEFAULT_MODEL` | 否 | Pi 默认值 | 启动时传给 Pi 的默认 model。 |
+| `PI_THINKING_LEVEL` | 否 | `medium` | Pi thinking level，例如 `low`、`medium`、`high`，取决于 provider 是否支持。 |
+| `PI_SYNOLOGY_DATA_DIR` | 否 | `~/.local/share/pi-synology-chat` | bridge 数据目录，保存 session、payload 日志、上传文件和公开文件。 |
+| `PI_MODEL_TARGETS_JSON` | 否 | `{}` | `/model` 命令可切换的模型目标配置。 |
+| `PI_MODEL_ALIASES_JSON` | 否 | 根据 targets 生成 | `/model` 命令别名，例如把 `local` 或 `grok` 映射到某个 target。 |
+
 ## Synology Chat 配置
 
 在 Synology Chat 中打开 **整合**。

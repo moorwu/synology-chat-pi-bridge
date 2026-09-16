@@ -36,6 +36,29 @@ bun run synology
 
 Open `http://BRIDGE_HOST:8789/health`; it should return `OK`.
 
+## Configuration Reference
+
+Put these variables in the environment file you load before starting the bridge. With the example systemd unit, that file is usually `~/.config/synology-chat-pi-bridge.env`.
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `SYNOLOGY_CHAT_LISTEN_HOST` | No | `0.0.0.0` | HTTP bind address for the bridge. Use `0.0.0.0` so the NAS can reach it over LAN. |
+| `SYNOLOGY_CHAT_PORT` | No | `8789` | HTTP port for `/synology-chat/webhook`, `/health`, and `/files/...`. |
+| `SYNOLOGY_CHAT_OUTGOING_TOKEN` | Recommended | none | Token from a Synology Chat outgoing webhook. Used to verify incoming requests. |
+| `SYNOLOGY_CHAT_OUTGOING_TOKENS` | No | none | Comma-separated extra outgoing tokens, useful when multiple Synology outgoing webhooks call the same bridge. |
+| `SYNOLOGY_CHAT_INCOMING_URL` | Yes for replies | none | Default Synology incoming webhook URL used for bot replies. |
+| `SYNOLOGY_CHAT_INCOMING_URLS_JSON` | No | `{}` | Per-channel incoming webhook map. Keys can be channel names or channel IDs. |
+| `SYNOLOGY_CHAT_IGNORE_USERS` | No | `Pi Bot` | Comma-separated Synology usernames to ignore, preventing bot self-trigger loops. |
+| `SYNOLOGY_CHAT_FILE_BASE_URL` | Yes for media preview | `http://127.0.0.1:<port>` | Public base URL for generated files. Set this to the bridge host LAN address, for example `http://192.168.50.103:8789`, not localhost. |
+| `PI_PATH` | No | `pi` | Path to the `pi` executable. |
+| `PI_WORKSPACE_DIR` | No | current working directory | Working directory for the Pi agent. |
+| `PI_DEFAULT_PROVIDER` | No | Pi default | Initial provider passed to Pi. |
+| `PI_DEFAULT_MODEL` | No | Pi default | Initial model passed to Pi. |
+| `PI_THINKING_LEVEL` | No | `medium` | Pi thinking level, such as `low`, `medium`, or `high`, depending on provider support. |
+| `PI_SYNOLOGY_DATA_DIR` | No | `~/.local/share/pi-synology-chat` | Bridge data directory for sessions, payload logs, uploads, and public files. |
+| `PI_MODEL_TARGETS_JSON` | No | `{}` | Model switch targets for `/model`, keyed by target name. |
+| `PI_MODEL_ALIASES_JSON` | No | generated from targets | Aliases for `/model`, for example mapping `local` or `grok` to a configured target. |
+
 ## Synology Chat Setup
 
 In Synology Chat, open **Integration**.
